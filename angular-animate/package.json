@@ -1,0 +1,27 @@
+{
+  "name": "@xlts.dev/angular-animate",
+  "version": "1.9.3",
+  "description": "XLTS for AngularJS module for animations",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/xlts-dev/bower-angular-animate"
+  },
+  "main": "index.js",
+  "keywords": [
+    "angular",
+    "framework",
+    "browser",
+    "animation",
+    "client-side"
+  ],
+  "author": {
+    "name": "XLTS.dev",
+    "email": "support@xlts.dev",
+    "url": "https://xlts.dev/angularjs"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "bugs": {
+    "email": "support@xlts.dev"
+  },
+  "homepage": "https://xlts.dev/angularjs"
+}

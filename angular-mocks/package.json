@@ -1,0 +1,28 @@
+{
+  "name": "@xlts.dev/angular-mocks",
+  "version": "1.9.3",
+  "description": "XLTS for AngularJS mocks for testing",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/xlts-dev/bower-angular-mocks"
+  },
+  "main": "angular-mocks.js",
+  "keywords": [
+    "angular",
+    "framework",
+    "browser",
+    "mocks",
+    "testing",
+    "client-side"
+  ],
+  "author": {
+    "name": "XLTS.dev",
+    "email": "support@xlts.dev",
+    "url": "https://xlts.dev/angularjs"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "bugs": {
+    "email": "support@xlts.dev"
+  },
+  "homepage": "https://xlts.dev/angularjs"
+}

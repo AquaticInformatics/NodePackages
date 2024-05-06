@@ -1,0 +1,10 @@
+{
+  "name": "@xlts.dev/angular-route",
+  "version": "1.9.3",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "main": "./angular-route.js",
+  "ignore": [],
+  "dependencies": {
+    "angular": "1.9.3"
+  }
+}

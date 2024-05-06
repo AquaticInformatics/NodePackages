@@ -1,0 +1,10 @@
+{
+  "name": "@xlts.dev/angular-aria",
+  "version": "1.9.3",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "main": "./angular-aria.js",
+  "ignore": [],
+  "dependencies": {
+    "angular": "1.9.3"
+  }
+}
