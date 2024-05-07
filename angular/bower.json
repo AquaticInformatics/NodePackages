@@ -1,9 +1,0 @@
-{
-  "name": "@xlts.dev/angular",
-  "version": "1.9.3",
-  "license": "SEE LICENSE IN LICENSE.md",
-  "main": "./angular.js",
-  "ignore": [],
-  "dependencies": {
-  }
-}
