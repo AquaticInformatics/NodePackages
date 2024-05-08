@@ -1,0 +1,17 @@
+lib/
+selenium/
+spec/
+built/spec/
+e2e_spec/
+built/e2e_spec/
+
+.clang-format
+.gitignore
+.gitattributes
+.github/
+.idea/
+.npmignore
+circle.yml
+npm-debug.log
+release.md
+tsconfig.json
