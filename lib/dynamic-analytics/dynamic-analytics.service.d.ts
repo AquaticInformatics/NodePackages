@@ -1,4 +1,5 @@
 import { HttpBackend } from '@angular/common/http';
+import { NgZone } from '@angular/core';
 import { Subject } from 'rxjs';
 import * as i0 from "@angular/core";
 export type VersionParameter = string | number | undefined;
@@ -86,39 +87,48 @@ export interface ISequence extends IDynamicEventBase {
     timeout?: number;
 }
 export declare class DynamicAnalyticsService {
+    private zone;
     readonly onEvent: Subject<DynamicEvent>;
-    private versionFilterPredicate;
-    private httpClient;
-    private eventRecords;
     loggingEnabled: boolean;
-    constructor(httpBackend: HttpBackend);
-    private readonly domChanged$;
-    private readonly observer;
+    private httpClient;
+    private versionFilterPredicate;
+    private filteredEvents;
+    private sequences;
+    private delegatedHandlers;
+    private beforeUnloadHandler?;
+    private isInitialized;
     private readonly sequenceTracker;
     private readonly timedEventForSequenceTracker;
     private readonly blockedSequenceIds;
-    private filteredEvents;
-    private sequences;
-    private documentConfigListeners;
-    private beforeUnloadConfigListeners;
-    private onDomChanged;
+    private delegatedConfigsByEventAction;
+    private documentConfigsByEventAction;
+    private beforeUnloadConfigs;
+    private configsNeedingStatusSelectorCheck;
+    constructor(httpBackend: HttpBackend, zone: NgZone);
     initialize(url: string, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean): void;
     initializeWithConfig(eventConfigDefinition: IEventConfigDefinition, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean): void;
-    private initializeMutationObserver;
+    /**
+     * Optional cleanup if you ever need to tear down (e.g. hot reload / tests).
+     */
+    destroy(): void;
     private initializeAnalyticsConfiguration;
     private initializeEventConfigDefinition;
+    private precomputeListenerConfiguration;
+    private installDelegatedListeners;
+    private installBeforeUnloadListener;
+    private handleDelegatedEvent;
+    private isValidForStatusSelector;
+    private closestMatching;
     private getConfiguration$;
-    private hasEventListener;
-    private getEventRecord;
-    private cleanupEventRecords;
-    private addEventListener;
     private getOnDynamicEventHandler;
-    private log;
+    private doesElementMatchConfig;
     private onSimpleOrStepEvent;
+    private shouldTrackKeyboardEvent;
+    private onBeforeUnload;
+    private trackEvent;
     private getAdditionalEventData;
     private isAlphaNumericKeyboardEvent;
-    private onDocumentClicked;
-    private onBeforeUnload;
+    private log;
     private formatDynamicEventString;
     private getSequenceProgress;
     private onStepEvent;
@@ -127,11 +137,9 @@ export declare class DynamicAnalyticsService {
     private startSequenceTimeout;
     private resetSequence;
     private trackAndResetSequence;
-    private trackEvent;
     private logEvent;
     private isStepEvent;
     private isSimpleEvent;
-    private isDynamicEventWithEventType;
     private isBeforeUnloadEventType;
     private isKeyboardEventType;
     private isDynamicEventWithSelector;
@@ -139,6 +147,7 @@ export declare class DynamicAnalyticsService {
     private isTimedEvent;
     private doesEventTargetTriggerStepEvent;
     private validateEventConfigDefinition;
+    private clearAllSequenceState;
     static ɵfac: i0.ɵɵFactoryDeclaration<DynamicAnalyticsService, never>;
     static ɵprov: i0.ɵɵInjectableDeclaration<DynamicAnalyticsService>;
 }

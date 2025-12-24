@@ -27,7 +27,7 @@ export interface IEventConfig {
 
 1. **Versioning**
 
-* **minVersion** and **maxVersion**: Consumers define these parameters in any format (e.g., `1.0`, `1.0.0-beta`) as strings. A version-checking predicate function, `versionFilterPredicate`, will verify these values against the current application version and return a boolean indicating compatibility.
+* **minVersion** and **maxVersion**: Consumers define these optional parameters in any format (e.g., `1.0`, `1.0.0-beta`) as strings or numbers. A version-checking predicate function, `versionFilterPredicate`, will verify these values against the current application version and return a boolean indicating compatibility.
 
 2. **Event Types and Actions**
 
@@ -47,7 +47,7 @@ export interface IEventConfig {
 4. **Selectors and Event Validity**
 
 * **selector**: CSS or DOM selector that binds the event to a UI element.
-* **additionalDataSelectors**: Array of CSS or DOM selectors that read multiple pieces of data from the DOM when the event fires and sends it (onEvent -> event.additionalData) along with the event.
+* **additionalDataSelectors** (optional): Array of CSS or DOM selectors that read multiple pieces of data from the DOM when the event fires and sends it (onEvent -> event.additionalData) along with the event.
 * **statusSelector** (optional): Conditional selector that verifies the event's validity when it fires (e.g., “Fire event only if element Z is visible and enabled”).
 
   **Suggested Best Practices**:
