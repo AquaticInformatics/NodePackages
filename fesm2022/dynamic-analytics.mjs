@@ -33,10 +33,13 @@ var KeyboardEventAction;
 })(KeyboardEventAction || (KeyboardEventAction = {}));
 class DynamicAnalyticsService {
     zone;
+    /** Emits tracked events (Simple events and completed trackable Sequences). Subscribe to forward events to your analytics backend. */
     onEvent = new Subject();
+    /** Enable to log tracking activity to the console for debugging. */
     loggingEnabled = false;
     httpClient;
     versionFilterPredicate;
+    translateTextContentFn;
     filteredEvents = [];
     sequences = [];
     // Delegation state
@@ -46,59 +49,44 @@ class DynamicAnalyticsService {
     // Sequence state
     sequenceTracker = {};
     timedEventForSequenceTracker = {};
-    blockedSequenceIds = [];
+    blockedSequenceIds = new Set();
     // Precomputed lookup maps for faster event dispatch (avoid filtering arrays on every DOM event)
     delegatedConfigsByEventAction = new Map();
     documentConfigsByEventAction = new Map();
     beforeUnloadConfigs = [];
     configsNeedingStatusSelectorCheck = new Map();
+    // Reverse lookup maps: event ID → sequences that reference it as a step or cancel event
+    sequencesByStepEventId = new Map();
+    sequencesByCancelEventId = new Map();
     constructor(httpBackend, zone) {
         this.zone = zone;
         this.httpClient = new HttpClient(httpBackend);
-        /*
-    Test cases:
-    - Click events / Simple event
-    
-    - Click X, then Y event / Sequence
-    - Mouse-over, then mouse-out without clicking inside event / Sequence with cancel event
-    - Click X (to open), then click Y to close without clicking Z events / Sequence with cancel event
-    
-    - Count number of times event X has been fired this session?
-    
-    - Window closed event. Use to submit values gathered using sequences, or event totals during a session. "How many times did sequence/event X happen in the session"
-    - Hourly/Minutely events to send totals during the last hour/minute
-    -
-    - Get a specific value from the DOM when firing an event (run arbitrary JS? Or just inspect DOM info?)
-    */
-        // this.eventConfigDefinition = {
-        //   configs: [
-        //     {
-        //       minVersion: '',
-        //       maxVersion: '',
-        //       events: [
-        //         // Simple click event
-        //         {id: 1, dynamicType: DynamicType.StepEvent, selector: '.toolbar-container > button', eventType: EventType.Click, message: 'Click ellipsis menu'},
-        //         {id: 2, dynamicType: DynamicType.StepEvent, selector: '.mat-mdc-menu-content button:nth-child(1)', eventType: EventType.Click, message: 'Click New Operation'},
-        //         {id: 3, dynamicType: DynamicType.StepEvent, selector: '.mat-mdc-menu-content button:nth-child(2)', eventType: EventType.Click, message: 'Click Location Wizard'},
-        //         {id: 4, dynamicType: DynamicType.StepEvent, selector: '.cdk-overlay-backdrop', eventType: EventType.Click, message: 'Click anywhere (other than sequence element(s))'},
-        //         // {id: 4, dynamicType: DynamicType.StepEvent, selector: 'document', eventType: EventType.Click, message: 'Click anywhere (other than sequence element(s))'},
-        //         {id: 5, dynamicType: DynamicType.Sequence, message: 'Click rating points icon', stepEvents: [1, 3], cancelEvents: [2, 4], isTrackable: true},
-        //       ]
-        //     }
-        //   ]
-        // };
-        // this.log(JSON.stringify(this.eventConfigDefinition));
     }
-    initialize(url, versionFilterPredicate) {
+    /**
+     * Initialize from a remote JSON configuration URL.
+     * @param url URL to fetch the IEventConfigDefinition JSON from.
+     * @param versionFilterPredicate Predicate that receives each config's minVersion/maxVersion and returns true if the config applies to the current app version.
+     * @param translateTextContent Optional callback to translate textContents values at initialization time. Receives each textContents string and should return its translated equivalent (or the original string if no translation is needed).
+     */
+    initialize(url, versionFilterPredicate, translateTextContent) {
         this.versionFilterPredicate = versionFilterPredicate;
+        this.translateTextContentFn = translateTextContent;
         this.initializeAnalyticsConfiguration(url);
     }
-    initializeWithConfig(eventConfigDefinition, versionFilterPredicate) {
+    /**
+     * Initialize directly from an in-memory configuration object. Useful for development and testing.
+     * @param eventConfigDefinition The configuration object containing event definitions.
+     * @param versionFilterPredicate Predicate that receives each config's minVersion/maxVersion and returns true if the config applies to the current app version.
+     * @param translateTextContent Optional callback to translate textContents values at initialization time. Receives each textContents string and should return its translated equivalent (or the original string if no translation is needed).
+     */
+    initializeWithConfig(eventConfigDefinition, versionFilterPredicate, translateTextContent) {
         this.versionFilterPredicate = versionFilterPredicate;
+        this.translateTextContentFn = translateTextContent;
         this.initializeEventConfigDefinition(eventConfigDefinition);
     }
     /**
-     * Optional cleanup if you ever need to tear down (e.g. hot reload / tests).
+     * Tear down all event listeners and reset internal state.
+     * Call before re-initializing or when the host component is destroyed.
      */
     destroy() {
         this.zone.runOutsideAngular(() => {
@@ -112,12 +100,15 @@ class DynamicAnalyticsService {
             }
         });
         this.isInitialized = false;
+        this.translateTextContentFn = undefined;
         this.filteredEvents = [];
         this.sequences = [];
         this.delegatedConfigsByEventAction.clear();
         this.documentConfigsByEventAction.clear();
         this.configsNeedingStatusSelectorCheck.clear();
         this.beforeUnloadConfigs = [];
+        this.sequencesByStepEventId.clear();
+        this.sequencesByCancelEventId.clear();
         // Reset per-session tracking
         this.clearAllSequenceState();
     }
@@ -131,22 +122,31 @@ class DynamicAnalyticsService {
         }
         const filteredEventConfigs = _.filter(eventConfigDefinition.configs, config => this.versionFilterPredicate(config.minVersion, config.maxVersion));
         this.validateEventConfigDefinition(filteredEventConfigs);
-        const events = [];
-        _.each(eventConfigDefinition.configs, config => {
-            if (this.versionFilterPredicate(config.minVersion, config.maxVersion)) {
-                events.push(...config.events);
-            }
-        });
-        this.filteredEvents = events;
+        this.filteredEvents = this.applyTextContentTranslations(filteredEventConfigs.flatMap(config => config.events));
         if (_.isEmpty(this.filteredEvents)) {
             console.warn('No analytics events found for this application version');
             return;
         }
         this.sequences = _.filter(this.filteredEvents, dynamicEvent => this.isSequence(dynamicEvent));
+        this.buildReverseLookupMaps();
         this.precomputeListenerConfiguration();
         this.installDelegatedListeners();
         this.installBeforeUnloadListener();
         this.isInitialized = true;
+    }
+    applyTextContentTranslations(events) {
+        if (_.isNil(this.translateTextContentFn)) {
+            return events;
+        }
+        return events.map(event => {
+            if (this.isDynamicEventWithSelector(event)) {
+                const selectorEvent = event;
+                if (!_.isNil(selectorEvent.textContents) && !_.isEmpty(selectorEvent.textContents)) {
+                    return { ...event, textContents: this.translateTextContentFn(selectorEvent.textContents) };
+                }
+            }
+            return event;
+        });
     }
     precomputeListenerConfiguration() {
         this.delegatedConfigsByEventAction.clear();
@@ -173,6 +173,22 @@ class DynamicAnalyticsService {
         });
         // Cache beforeunload configs once (avoid filtering each time).
         this.beforeUnloadConfigs = this.filteredEvents.filter(dynamicEvent => this.isBeforeUnloadEventType(dynamicEvent));
+    }
+    buildReverseLookupMaps() {
+        this.sequencesByStepEventId.clear();
+        this.sequencesByCancelEventId.clear();
+        _.each(this.sequences, sequence => {
+            _.each(sequence.steps, stepId => {
+                const existing = this.sequencesByStepEventId.get(stepId) ?? [];
+                existing.push(sequence);
+                this.sequencesByStepEventId.set(stepId, existing);
+            });
+            _.each(sequence.cancelledBy, cancelId => {
+                const existing = this.sequencesByCancelEventId.get(cancelId) ?? [];
+                existing.push(sequence);
+                this.sequencesByCancelEventId.set(cancelId, existing);
+            });
+        });
     }
     installDelegatedListeners() {
         const requiredEventActions = new Set();
@@ -232,6 +248,9 @@ class DynamicAnalyticsService {
             if (_.isNil(matchingElement)) {
                 continue;
             }
+            if (!this.isValidForTextContents(delegatedConfig, matchingElement)) {
+                continue;
+            }
             const isValidForStatusSelector = this.isValidForStatusSelector(delegatedConfig);
             if (!isValidForStatusSelector) {
                 continue;
@@ -251,6 +270,15 @@ class DynamicAnalyticsService {
             return false;
         }
         return true;
+    }
+    isValidForTextContents(dynamicEvent, element) {
+        if (_.isNil(dynamicEvent.textContents) || _.isEmpty(dynamicEvent.textContents)) {
+            return true;
+        }
+        const textContent = element.textContent?.trim() ?? '';
+        return dynamicEvent.matchExactTextContents
+            ? textContent === dynamicEvent.textContents
+            : textContent.includes(dynamicEvent.textContents);
     }
     closestMatching(start, selector) {
         // Some selectors may be invalid; guard so one bad selector doesn't break everything.
@@ -377,7 +405,7 @@ class DynamicAnalyticsService {
         return `** Tracking sequence: ${event.id}. ${event.message}`;
     }
     getSequenceProgress(dynamicEvent) {
-        const sequencesContainingThisEvent = _.filter(this.sequences, sequence => _.includes(sequence.steps, dynamicEvent.id));
+        const sequencesContainingThisEvent = this.sequencesByStepEventId.get(dynamicEvent.id) ?? [];
         const progress = [];
         _.each(sequencesContainingThisEvent, sequence => {
             if (_.includes(this.sequenceTracker[sequence.id], dynamicEvent.id)) {
@@ -387,7 +415,7 @@ class DynamicAnalyticsService {
         return progress.join(', ');
     }
     onStepEvent(dynamicEvent, event) {
-        const sequencesCancelledByThisEvent = _.filter(this.sequences, sequence => _.includes(sequence.cancelledBy, dynamicEvent.id));
+        const sequencesCancelledByThisEvent = this.sequencesByCancelEventId.get(dynamicEvent.id) ?? [];
         if (!_.isEmpty(sequencesCancelledByThisEvent)) {
             const resetSequences = [];
             _.each(sequencesCancelledByThisEvent, sequence => {
@@ -397,9 +425,9 @@ class DynamicAnalyticsService {
                     !this.doesEventTargetTriggerStepEvent(sequence, event)) {
                     resetSequences.push(sequence);
                     this.resetSequence(sequence);
-                    this.blockedSequenceIds.push(sequence.id);
+                    this.blockedSequenceIds.add(sequence.id);
                     setTimeout(() => {
-                        _.pull(this.blockedSequenceIds, sequence.id);
+                        this.blockedSequenceIds.delete(sequence.id);
                     }, 10);
                 }
             });
@@ -407,18 +435,17 @@ class DynamicAnalyticsService {
                 this.log(`Sequence reset by event ${dynamicEvent.id}: ${resetSequences.map(sequence => sequence.id).join(',')}`);
             }
         }
-        const sequencesContainingThisEvent = _.filter(this.sequences, sequence => _.includes(sequence.steps, dynamicEvent.id) &&
-            !_.includes(this.blockedSequenceIds, sequence.id));
+        const sequencesContainingThisEvent = (this.sequencesByStepEventId.get(dynamicEvent.id) ?? [])
+            .filter(sequence => !this.blockedSequenceIds.has(sequence.id));
         _.each(sequencesContainingThisEvent, sequence => {
             setTimeout(() => {
-                _.pull(this.blockedSequenceIds, sequence.id);
+                this.blockedSequenceIds.delete(sequence.id);
             }, 10);
             const tracker = this.sequenceTracker[sequence.id] = this.sequenceTracker[sequence.id] ?? [];
             if (sequence.steps[tracker.length] === dynamicEvent.id) {
                 this.log(`Adding event ${dynamicEvent.id} to Sequence ${sequence.id} tracker`);
                 tracker.push(dynamicEvent.id);
-                this.blockedSequenceIds.push(sequence.id);
-                // this.logEvent(dynamicEvent); // TODO: Fix: Logging a misleading tracking sequence when a trackable event leads into another sequence
+                this.blockedSequenceIds.add(sequence.id);
             }
             if (tracker.length === sequence.steps.length) {
                 this.log(`Sequence ${sequence.id} complete`);
@@ -429,7 +456,9 @@ class DynamicAnalyticsService {
                 const nextEventIdInSequence = sequence.steps[tracker.length];
                 const nextEventInSequence = _.find(this.filteredEvents, { id: nextEventIdInSequence });
                 if (_.isNil(nextEventInSequence)) {
-                    throw new Error(`Error: Next event in sequence not found. Incorrect Id specified? Next event id ${nextEventIdInSequence}. Sequence ${sequence.id}`);
+                    console.error(`Next event in sequence not found. Incorrect Id specified? Next event id ${nextEventIdInSequence}. Sequence ${sequence.id}`);
+                    this.resetSequence(sequence);
+                    return;
                 }
                 if (this.isTimedEvent(nextEventInSequence)) {
                     this.startTimedEventTimerForSequence(nextEventInSequence, sequence);
@@ -485,6 +514,9 @@ class DynamicAnalyticsService {
         }
     }
     logEvent(event) {
+        if (!this.loggingEnabled) {
+            return;
+        }
         if (this.isSequence(event) && !event.isTrackable) {
             return;
         }
@@ -501,7 +533,8 @@ class DynamicAnalyticsService {
         return (this.isSimpleEvent(event) || this.isStepEvent(event)) && (event).eventAction === MiscellaneousEventAction.Beforeunload;
     }
     isKeyboardEventType(event) {
-        return (this.isSimpleEvent(event) || this.isStepEvent(event)) && (event).eventAction in KeyboardEventAction;
+        return (this.isSimpleEvent(event) || this.isStepEvent(event)) &&
+            Object.values(KeyboardEventAction).includes(event.eventAction);
     }
     isDynamicEventWithSelector(event) {
         return (this.isSimpleEvent(event) || this.isStepEvent(event)) && (event).selector !== undefined;
@@ -568,6 +601,9 @@ class DynamicAnalyticsService {
                 if (this.isDynamicEventWithSelector(event) && !_.isNil(event.selector) && _.isEmpty(event.selector)) {
                     throw new Error('Selector cannot be an empty string');
                 }
+                if (this.isDynamicEventWithSelector(event) && event.matchExactTextContents === true && (_.isNil(event.textContents) || _.isEmpty(event.textContents))) {
+                    throw new Error('matchExactTextContents can only be true when textContents is a non-empty string');
+                }
             });
         });
         uniqueSequenceStepEventIds.forEach(id => {
@@ -586,9 +622,13 @@ class DynamicAnalyticsService {
             delete this.sequenceTracker[Number(sequenceIdKey)];
         }
         for (const sequenceTimerKey of Object.keys(this.timedEventForSequenceTracker)) {
+            const tracker = this.timedEventForSequenceTracker[Number(sequenceTimerKey)];
+            if (!_.isNil(tracker)) {
+                _.each(tracker, timeoutId => clearTimeout(timeoutId));
+            }
             delete this.timedEventForSequenceTracker[Number(sequenceTimerKey)];
         }
-        this.blockedSequenceIds.length = 0;
+        this.blockedSequenceIds.clear();
     }
     static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "19.2.4", ngImport: i0, type: DynamicAnalyticsService, deps: [{ token: i1.HttpBackend }, { token: i0.NgZone }], target: i0.ɵɵFactoryTarget.Injectable });
     static ɵprov = i0.ɵɵngDeclareInjectable({ minVersion: "12.0.0", version: "19.2.4", ngImport: i0, type: DynamicAnalyticsService, providedIn: 'root' });

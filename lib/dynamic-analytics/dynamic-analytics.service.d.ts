@@ -49,6 +49,8 @@ export interface IDynamicEventWithEventAction extends IDynamicEventBase {
 export interface IDynamicEventWithSelector extends IDynamicEventWithEventAction {
     selector: string;
     statusSelector?: string;
+    textContents?: string;
+    matchExactTextContents?: boolean;
 }
 export interface ISimpleEvent extends IDynamicEventWithSelector {
     dynamicType: DynamicType.Simple;
@@ -88,10 +90,13 @@ export interface ISequence extends IDynamicEventBase {
 }
 export declare class DynamicAnalyticsService {
     private zone;
+    /** Emits tracked events (Simple events and completed trackable Sequences). Subscribe to forward events to your analytics backend. */
     readonly onEvent: Subject<DynamicEvent>;
+    /** Enable to log tracking activity to the console for debugging. */
     loggingEnabled: boolean;
     private httpClient;
     private versionFilterPredicate;
+    private translateTextContentFn?;
     private filteredEvents;
     private sequences;
     private delegatedHandlers;
@@ -104,20 +109,38 @@ export declare class DynamicAnalyticsService {
     private documentConfigsByEventAction;
     private beforeUnloadConfigs;
     private configsNeedingStatusSelectorCheck;
+    private sequencesByStepEventId;
+    private sequencesByCancelEventId;
     constructor(httpBackend: HttpBackend, zone: NgZone);
-    initialize(url: string, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean): void;
-    initializeWithConfig(eventConfigDefinition: IEventConfigDefinition, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean): void;
     /**
-     * Optional cleanup if you ever need to tear down (e.g. hot reload / tests).
+     * Initialize from a remote JSON configuration URL.
+     * @param url URL to fetch the IEventConfigDefinition JSON from.
+     * @param versionFilterPredicate Predicate that receives each config's minVersion/maxVersion and returns true if the config applies to the current app version.
+     * @param translateTextContent Optional callback to translate textContents values at initialization time. Receives each textContents string and should return its translated equivalent (or the original string if no translation is needed).
+     */
+    initialize(url: string, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean, translateTextContent?: (textContent: string) => string): void;
+    /**
+     * Initialize directly from an in-memory configuration object. Useful for development and testing.
+     * @param eventConfigDefinition The configuration object containing event definitions.
+     * @param versionFilterPredicate Predicate that receives each config's minVersion/maxVersion and returns true if the config applies to the current app version.
+     * @param translateTextContent Optional callback to translate textContents values at initialization time. Receives each textContents string and should return its translated equivalent (or the original string if no translation is needed).
+     */
+    initializeWithConfig(eventConfigDefinition: IEventConfigDefinition, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean, translateTextContent?: (textContent: string) => string): void;
+    /**
+     * Tear down all event listeners and reset internal state.
+     * Call before re-initializing or when the host component is destroyed.
      */
     destroy(): void;
     private initializeAnalyticsConfiguration;
     private initializeEventConfigDefinition;
+    private applyTextContentTranslations;
     private precomputeListenerConfiguration;
+    private buildReverseLookupMaps;
     private installDelegatedListeners;
     private installBeforeUnloadListener;
     private handleDelegatedEvent;
     private isValidForStatusSelector;
+    private isValidForTextContents;
     private closestMatching;
     private getConfiguration$;
     private getOnDynamicEventHandler;
