@@ -142,14 +142,14 @@ class DynamicAnalyticsService {
             if (this.isDynamicEventWithSelector(event)) {
                 const selectorEvent = event;
                 const hasTextContents = !_.isNil(selectorEvent.textContents) && !_.isEmpty(selectorEvent.textContents);
-                const hasStatusTextContents = !_.isNil(selectorEvent.statusSelectorTextContents) && !_.isEmpty(selectorEvent.statusSelectorTextContents);
+                const hasStatusTextContents = !_.isNil(selectorEvent.guardSelectorTextContents) && !_.isEmpty(selectorEvent.guardSelectorTextContents);
                 if (hasTextContents || hasStatusTextContents) {
                     const translated = { ...event };
                     if (hasTextContents) {
                         translated.textContents = this.translateTextContentFn(selectorEvent.textContents);
                     }
                     if (hasStatusTextContents) {
-                        translated.statusSelectorTextContents = this.translateTextContentFn(selectorEvent.statusSelectorTextContents);
+                        translated.guardSelectorTextContents = this.translateTextContentFn(selectorEvent.guardSelectorTextContents);
                     }
                     return translated;
                 }
@@ -161,12 +161,12 @@ class DynamicAnalyticsService {
         this.delegatedConfigsByEventAction.clear();
         this.documentConfigsByEventAction.clear();
         this.configsNeedingStatusSelectorCheck.clear();
-        // Precompute statusSelector presence so we don't branch or re-check string emptiness repeatedly.
+        // Precompute guardSelector presence so we don't branch or re-check string emptiness repeatedly.
         _.each(this.filteredEvents, dynamicEvent => {
             if (this.isDynamicEventWithSelector(dynamicEvent)) {
                 const selectorEvent = dynamicEvent;
-                if (!_.isNil(selectorEvent.statusSelector) && !_.isEmpty(selectorEvent.statusSelector)) {
-                    this.configsNeedingStatusSelectorCheck.set(selectorEvent.id, selectorEvent.statusSelector);
+                if (!_.isNil(selectorEvent.guardSelector) && !_.isEmpty(selectorEvent.guardSelector)) {
+                    this.configsNeedingStatusSelectorCheck.set(selectorEvent.id, selectorEvent.guardSelector);
                 }
                 if (selectorEvent.selector === 'document') {
                     const existingDocumentConfigs = this.documentConfigsByEventAction.get(selectorEvent.eventAction) ?? [];
@@ -270,16 +270,16 @@ class DynamicAnalyticsService {
         }
     }
     isValidForStatusSelector(dynamicEvent) {
-        const statusSelector = this.configsNeedingStatusSelectorCheck.get(dynamicEvent.id);
-        if (_.isNil(statusSelector)) {
+        const guardSelector = this.configsNeedingStatusSelectorCheck.get(dynamicEvent.id);
+        if (_.isNil(guardSelector)) {
             return true;
         }
-        const matchingStatusElements = document.querySelectorAll(statusSelector);
+        const matchingStatusElements = document.querySelectorAll(guardSelector);
         if (_.isNil(matchingStatusElements) || matchingStatusElements.length === 0) {
             return false;
         }
-        if (!_.isNil(dynamicEvent.statusSelectorTextContents) && !_.isEmpty(dynamicEvent.statusSelectorTextContents)) {
-            const hasTextMatch = Array.from(matchingStatusElements).some(element => this.elementMatchesText(element, dynamicEvent.statusSelectorTextContents, !!dynamicEvent.matchExactStatusSelectorTextContents));
+        if (!_.isNil(dynamicEvent.guardSelectorTextContents) && !_.isEmpty(dynamicEvent.guardSelectorTextContents)) {
+            const hasTextMatch = Array.from(matchingStatusElements).some(element => this.elementMatchesText(element, dynamicEvent.guardSelectorTextContents, !!dynamicEvent.matchExactGuardSelectorTextContents));
             if (!hasTextMatch) {
                 return false;
             }
@@ -319,7 +319,7 @@ class DynamicAnalyticsService {
         return (event) => {
             // Only enforce "still matches" if we have element context and selector event.
             if (!_.isNil(element) && this.isDynamicEventWithSelector(dynamicEvent)) {
-                const selectorToCheck = dynamicEvent.statusSelector ?? dynamicEvent.selector;
+                const selectorToCheck = dynamicEvent.guardSelector ?? dynamicEvent.selector;
                 const elementsMatchingSelector = document.querySelectorAll(selectorToCheck);
                 const doesElementMatchConfig = this.doesElementMatchConfig(dynamicEvent, element, elementsMatchingSelector);
                 if (!doesElementMatchConfig) {
@@ -331,7 +331,7 @@ class DynamicAnalyticsService {
         };
     }
     doesElementMatchConfig(dynamicEvent, element, elementsMatchingSelector) {
-        if (_.isNil(dynamicEvent.statusSelector)) {
+        if (_.isNil(dynamicEvent.guardSelector)) {
             return _.some(elementsMatchingSelector, matchingElement => matchingElement === element);
         }
         return elementsMatchingSelector.length > 0;
@@ -582,7 +582,7 @@ class DynamicAnalyticsService {
         if (_.isNil(stepEvent) || !this.isDynamicEventWithSelector(stepEvent)) {
             return false;
         }
-        const elementsMatchingSelector = document.querySelectorAll(stepEvent.statusSelector ?? stepEvent.selector);
+        const elementsMatchingSelector = document.querySelectorAll(stepEvent.guardSelector ?? stepEvent.selector);
         const target = event.target;
         return _.some(elementsMatchingSelector, element => element === target || element.contains(target));
     }
@@ -628,11 +628,11 @@ class DynamicAnalyticsService {
                 if (this.isDynamicEventWithSelector(event) && event.matchExactTextContents === true && (_.isNil(event.textContents) || _.isEmpty(event.textContents))) {
                     throw new Error('matchExactTextContents can only be true when textContents is a non-empty string');
                 }
-                if (this.isDynamicEventWithSelector(event) && !_.isNil(event.statusSelectorTextContents) && !_.isEmpty(event.statusSelectorTextContents) && (_.isNil(event.statusSelector) || _.isEmpty(event.statusSelector))) {
-                    throw new Error('statusSelectorTextContents requires a non-empty statusSelector');
+                if (this.isDynamicEventWithSelector(event) && !_.isNil(event.guardSelectorTextContents) && !_.isEmpty(event.guardSelectorTextContents) && (_.isNil(event.guardSelector) || _.isEmpty(event.guardSelector))) {
+                    throw new Error('guardSelectorTextContents requires a non-empty guardSelector');
                 }
-                if (this.isDynamicEventWithSelector(event) && event.matchExactStatusSelectorTextContents === true && (_.isNil(event.statusSelectorTextContents) || _.isEmpty(event.statusSelectorTextContents))) {
-                    throw new Error('matchExactStatusSelectorTextContents can only be true when statusSelectorTextContents is a non-empty string');
+                if (this.isDynamicEventWithSelector(event) && event.matchExactGuardSelectorTextContents === true && (_.isNil(event.guardSelectorTextContents) || _.isEmpty(event.guardSelectorTextContents))) {
+                    throw new Error('matchExactGuardSelectorTextContents can only be true when guardSelectorTextContents is a non-empty string');
                 }
                 if (!_.isNil(event.keys)) {
                     if (!this.isKeyboardEventType(event)) {

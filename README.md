@@ -48,11 +48,11 @@ export interface IEventConfig {
 
 * **selector**: CSS or DOM selector that binds the event to a UI element.
 * **additionalDataSelectors** (optional): Array of CSS or DOM selectors that read multiple pieces of data from the DOM when the event fires and sends it (onEvent -> event.additionalData) along with the event.
-* **statusSelector** (optional): Conditional selector that verifies the event's validity when it fires (e.g., “Fire event only if element Z is visible and enabled”).
+* **guardSelector** (optional): Conditional selector that verifies the event's validity when it fires (e.g., “Fire event only if element Z is visible and enabled”).
 
   **Suggested Best Practices**:
 
-* Use `statusSelector` when an event should only fire in specific UI states.
+* Use `guardSelector` when an event should only fire in specific UI states.
 
 5. **Sequences and sequence cancellation**
 
@@ -70,7 +70,7 @@ const eventConfig: IEventConfig = {
   maxVersion: '2.0',
   events: [
     { id: 1, dynamicType: DynamicType.Simple, eventAction: MouseEventAction.Click, selector: '#openPopup', message: 'User opened popup', label: 'Open Popup' }, 
-    { id: 2, dynamicType: DynamicType.StepEvent, eventAction: KeyboardEventAction.KeyPress, selector: '#inputField', message: 'User typed in input field', label: 'User typed', statusSelector: '#saveButton:not([disabled])' },
+    { id: 2, dynamicType: DynamicType.StepEvent, eventAction: KeyboardEventAction.KeyPress, selector: '#inputField', message: 'User typed in input field', label: 'User typed', guardSelector: '#saveButton:not([disabled])' },
     { id: 3, dynamicType: DynamicType.Simple, eventAction: MouseEventAction.Click, selector: '#saveButton', message: 'User clicked save', label: 'User saved', additionalDataSelector: '#inputField0' },
     { id: 4, dynamicType: DynamicType.Sequence, steps: [1, 2, 3], cancelledBy: [5], timeout: 300000, trackable: true, message: 'User completed form sequence' },
     { id: 5, dynamicType: DynamicType.StepEvent, eventAction: MouseEventAction.Click, selector: '#closePopup', message: 'User canceled sequence' }

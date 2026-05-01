@@ -48,11 +48,11 @@ export interface IDynamicEventWithEventAction extends IDynamicEventBase {
 }
 export interface IDynamicEventWithSelector extends IDynamicEventWithEventAction {
     selector: string;
-    statusSelector?: string;
     textContents?: string;
     matchExactTextContents?: boolean;
-    statusSelectorTextContents?: string;
-    matchExactStatusSelectorTextContents?: boolean;
+    guardSelector?: string;
+    guardSelectorTextContents?: string;
+    matchExactGuardSelectorTextContents?: boolean;
 }
 export interface ISimpleEvent extends IDynamicEventWithSelector {
     dynamicType: DynamicType.Simple;
