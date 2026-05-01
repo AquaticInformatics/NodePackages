@@ -63,7 +63,7 @@ export interface IStepEvent extends IDynamicEventWithSelector {
 }
 export interface ITimedEvent extends IDynamicEventWithEventAction {
     dynamicType: DynamicType.StepEvent | DynamicType.Simple;
-    eventAction: MiscellaneousEventAction.Timed;
+    eventAction: typeof MiscellaneousEventAction.Timed;
     selector: undefined;
     timeout: number;
 }
@@ -81,7 +81,7 @@ export interface IKeyboardEvent extends IDynamicEventWithEventAction {
 }
 export interface IBeforeUnloadEvent extends IDynamicEventWithEventAction {
     dynamicType: DynamicType.StepEvent | DynamicType.Simple;
-    eventAction: MiscellaneousEventAction.Beforeunload;
+    eventAction: typeof MiscellaneousEventAction.Beforeunload;
     selector: string;
 }
 export interface ISequence extends IDynamicEventBase {
