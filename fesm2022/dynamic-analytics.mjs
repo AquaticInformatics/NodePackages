@@ -357,6 +357,14 @@ class DynamicAnalyticsService {
             return true;
         }
         const keyboardDynamicEvent = dynamicEvent;
+        const pressedKey = event?.key;
+        // Check keys filter: if specific keys are defined, only allow those
+        if (!_.isNil(keyboardDynamicEvent.keys) && !_.isEmpty(keyboardDynamicEvent.keys)) {
+            const allowedKeys = keyboardDynamicEvent.keys.split('|');
+            if (!allowedKeys.includes(pressedKey)) {
+                return false;
+            }
+        }
         if (!keyboardDynamicEvent.isAlphaNumeric) {
             return true;
         }
@@ -625,6 +633,14 @@ class DynamicAnalyticsService {
                 }
                 if (this.isDynamicEventWithSelector(event) && event.matchExactStatusSelectorTextContents === true && (_.isNil(event.statusSelectorTextContents) || _.isEmpty(event.statusSelectorTextContents))) {
                     throw new Error('matchExactStatusSelectorTextContents can only be true when statusSelectorTextContents is a non-empty string');
+                }
+                if (!_.isNil(event.keys)) {
+                    if (!this.isKeyboardEventType(event)) {
+                        throw new Error('keys can only be specified for keyboard event types');
+                    }
+                    if (_.isEmpty(event.keys)) {
+                        throw new Error('keys cannot be an empty string');
+                    }
                 }
             });
         });

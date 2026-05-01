@@ -77,6 +77,7 @@ export interface IKeyboardEvent extends IDynamicEventWithEventAction {
     eventAction: KeyboardEventAction;
     selector: string;
     isAlphaNumeric: boolean;
+    keys?: string;
 }
 export interface IBeforeUnloadEvent extends IDynamicEventWithEventAction {
     dynamicType: DynamicType.StepEvent | DynamicType.Simple;
