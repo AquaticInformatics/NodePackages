@@ -51,6 +51,8 @@ export interface IDynamicEventWithSelector extends IDynamicEventWithEventAction 
     statusSelector?: string;
     textContents?: string;
     matchExactTextContents?: boolean;
+    statusSelectorTextContents?: string;
+    matchExactStatusSelectorTextContents?: boolean;
 }
 export interface ISimpleEvent extends IDynamicEventWithSelector {
     dynamicType: DynamicType.Simple;
@@ -140,6 +142,7 @@ export declare class DynamicAnalyticsService {
     private installBeforeUnloadListener;
     private handleDelegatedEvent;
     private isValidForStatusSelector;
+    private elementMatchesText;
     private isValidForTextContents;
     private closestMatching;
     private getConfiguration$;

@@ -141,8 +141,17 @@ class DynamicAnalyticsService {
         return events.map(event => {
             if (this.isDynamicEventWithSelector(event)) {
                 const selectorEvent = event;
-                if (!_.isNil(selectorEvent.textContents) && !_.isEmpty(selectorEvent.textContents)) {
-                    return { ...event, textContents: this.translateTextContentFn(selectorEvent.textContents) };
+                const hasTextContents = !_.isNil(selectorEvent.textContents) && !_.isEmpty(selectorEvent.textContents);
+                const hasStatusTextContents = !_.isNil(selectorEvent.statusSelectorTextContents) && !_.isEmpty(selectorEvent.statusSelectorTextContents);
+                if (hasTextContents || hasStatusTextContents) {
+                    const translated = { ...event };
+                    if (hasTextContents) {
+                        translated.textContents = this.translateTextContentFn(selectorEvent.textContents);
+                    }
+                    if (hasStatusTextContents) {
+                        translated.statusSelectorTextContents = this.translateTextContentFn(selectorEvent.statusSelectorTextContents);
+                    }
+                    return translated;
                 }
             }
             return event;
@@ -269,16 +278,23 @@ class DynamicAnalyticsService {
         if (_.isNil(matchingStatusElements) || matchingStatusElements.length === 0) {
             return false;
         }
+        if (!_.isNil(dynamicEvent.statusSelectorTextContents) && !_.isEmpty(dynamicEvent.statusSelectorTextContents)) {
+            const hasTextMatch = Array.from(matchingStatusElements).some(element => this.elementMatchesText(element, dynamicEvent.statusSelectorTextContents, !!dynamicEvent.matchExactStatusSelectorTextContents));
+            if (!hasTextMatch) {
+                return false;
+            }
+        }
         return true;
+    }
+    elementMatchesText(element, text, exactMatch) {
+        const trimmed = element.textContent?.trim() ?? '';
+        return exactMatch ? trimmed === text : trimmed.includes(text);
     }
     isValidForTextContents(dynamicEvent, element) {
         if (_.isNil(dynamicEvent.textContents) || _.isEmpty(dynamicEvent.textContents)) {
             return true;
         }
-        const textContent = element.textContent?.trim() ?? '';
-        return dynamicEvent.matchExactTextContents
-            ? textContent === dynamicEvent.textContents
-            : textContent.includes(dynamicEvent.textContents);
+        return this.elementMatchesText(element, dynamicEvent.textContents, !!dynamicEvent.matchExactTextContents);
     }
     closestMatching(start, selector) {
         // Some selectors may be invalid; guard so one bad selector doesn't break everything.
@@ -603,6 +619,12 @@ class DynamicAnalyticsService {
                 }
                 if (this.isDynamicEventWithSelector(event) && event.matchExactTextContents === true && (_.isNil(event.textContents) || _.isEmpty(event.textContents))) {
                     throw new Error('matchExactTextContents can only be true when textContents is a non-empty string');
+                }
+                if (this.isDynamicEventWithSelector(event) && !_.isNil(event.statusSelectorTextContents) && !_.isEmpty(event.statusSelectorTextContents) && (_.isNil(event.statusSelector) || _.isEmpty(event.statusSelector))) {
+                    throw new Error('statusSelectorTextContents requires a non-empty statusSelector');
+                }
+                if (this.isDynamicEventWithSelector(event) && event.matchExactStatusSelectorTextContents === true && (_.isNil(event.statusSelectorTextContents) || _.isEmpty(event.statusSelectorTextContents))) {
+                    throw new Error('matchExactStatusSelectorTextContents can only be true when statusSelectorTextContents is a non-empty string');
                 }
             });
         });
