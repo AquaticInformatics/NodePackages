@@ -145,13 +145,23 @@ declare class DynamicAnalyticsCore {
     constructor(options?: DynamicAnalyticsCoreOptions);
     /**
      * Initialize from a remote JSON configuration URL.
+     *
+     * This is the primary way to initialize the service in production: it fetches the
+     * configuration remotely (via `configLoader`) so it can be updated independently of your
+     * application's deployment. For loading an in-memory config directly (e.g. in unit tests or
+     * while authoring/validating a configuration before deployment), use `initializeWithConfig()`
+     * instead.
      * @param url URL to fetch the IEventConfigDefinition JSON from.
      * @param versionFilterPredicate Predicate that receives each config's minVersion/maxVersion and returns true if the config applies to the current app version.
      * @param translateTextContent Optional callback to translate textContents values at initialization time. Receives each textContents string and should return its translated equivalent (or the original string if no translation is needed).
      */
     initialize(url: string, versionFilterPredicate: (minVersion: VersionParameter, maxVersion: VersionParameter) => boolean, translateTextContent?: (textContent: string) => string): void;
     /**
-     * Initialize directly from an in-memory configuration object. Useful for development and testing.
+     * Initialize directly from an in-memory configuration object.
+     *
+     * Intended for unit tests and for validating a configuration before deployment (e.g. previewing
+     * it in the configurator app) — not for production use. Production apps should use `initialize()`
+     * to load the configuration from a URL instead, so it can be updated without a redeploy.
      * @param eventConfigDefinition The configuration object containing event definitions.
      * @param versionFilterPredicate Predicate that receives each config's minVersion/maxVersion and returns true if the config applies to the current app version.
      * @param translateTextContent Optional callback to translate textContents values at initialization time. Receives each textContents string and should return its translated equivalent (or the original string if no translation is needed).
@@ -224,7 +234,10 @@ interface UseDynamicAnalyticsOptions extends DynamicAnalyticsCoreOptions {
  *   });
  *
  *   useEffect(() => {
- *     analytics.initializeWithConfig(config, (min, max) => isVersionCompatible(min, max));
+ *     // initialize() loads the config from a URL - the primary way to initialize in production.
+ *     // initializeWithConfig() is also available, but is intended for unit tests / pre-deployment
+ *     // validation of an in-memory config only.
+ *     analytics.initialize('/config.json', (min, max) => isVersionCompatible(min, max));
  *   }, [analytics]);
  *
  *   return <div>...</div>;

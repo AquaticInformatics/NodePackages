@@ -28,7 +28,7 @@ npm install https://github.com/AquaticInformatics/NodePackages#dynamic-analytics
 <script>
   const analytics = new DynamicAnalyticsCore.DynamicAnalyticsCore();
   analytics.onEvent.subscribe(event => console.log(event));
-  analytics.initializeWithConfig(config, (min, max) => true);
+  analytics.initialize('/config.json', (min, max) => true);
 </script>
 ```
 
@@ -52,7 +52,9 @@ const dynamicAnalyticsModuleName = registerDynamicAnalyticsAngularJsModule(angul
 angular.module('myApp', [dynamicAnalyticsModuleName]);
 
 // Injected like any other AngularJS service:
-// function MyController(dynamicAnalyticsService) { ... }
+// function MyController(dynamicAnalyticsService) {
+//   dynamicAnalyticsService.initialize('/config.json', (min, max) => isVersionCompatible(min, max));
+// }
 ```
 
 Events are re-entered via `$rootScope.$applyAsync`, so AngularJS bindings/watchers reacting to
@@ -69,7 +71,7 @@ function App() {
   });
 
   useEffect(() => {
-    analytics.initializeWithConfig(config, (min, max) => isVersionCompatible(min, max));
+    analytics.initialize('/config.json', (min, max) => isVersionCompatible(min, max));
   }, [analytics]);
 
   return <div>...</div>;
@@ -78,6 +80,16 @@ function App() {
 
 The hook creates a single `DynamicAnalyticsCore` instance per component and calls `destroy()`
 automatically on unmount.
+
+### Initializing: `initialize()` vs `initializeWithConfig()`
+
+- **`initialize(url, versionFilterPredicate, translateTextContent?)`** — the primary, intended way
+  to initialize in production. It fetches the `IEventConfigDefinition` JSON from `url` at runtime,
+  so the configuration can be updated independently of your application's deployment.
+- **`initializeWithConfig(eventConfigDefinition, versionFilterPredicate, translateTextContent?)`** —
+  initializes directly from an in-memory config object instead of fetching one. This exists for
+  **unit tests** and for **previewing/validating a configuration before deployment** (e.g. in the
+  configurator app) — it is not intended for production use.
 
 ### Configuration structure, event types, and validation rules
 
