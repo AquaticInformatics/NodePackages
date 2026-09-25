@@ -1,50 +1,50 @@
 {
-  "name": "dynamic-analytics-core",
-  "version": "1.3.0",
-  "description": "Framework-agnostic dynamic analytics engine (DOM event delegation, sequences, and remote configuration loading). Works in plain JS, AngularJS 1.x, React, Angular, or any other JS environment.",
-  "peerDependencies": {
-    "@types/lodash": "^4.17.16",
-    "lodash": "^4.17.21",
-    "react": ">=16.8.0 <20.0.0",
-    "rxjs": "^7.8.2"
-  },
-  "peerDependenciesMeta": {
-    "@types/lodash": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    }
-  },
-  "dependencies": {
-    "tslib": "^2.8.1"
-  },
-  "sideEffects": false,
-  "main": "./index.cjs",
-  "module": "./index.mjs",
-  "unpkg": "./index.global.js",
-  "types": "./index.d.ts",
-  "exports": {
-    "./package.json": {
-      "default": "./package.json"
-    },
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.mjs",
-      "require": "./index.cjs",
-      "default": "./index.mjs"
-    },
-    "./angularjs": {
-      "types": "./angularjs.d.ts",
-      "import": "./angularjs.mjs",
-      "require": "./angularjs.cjs",
-      "default": "./angularjs.mjs"
-    },
-    "./react": {
-      "types": "./react.d.ts",
-      "import": "./react.mjs",
-      "require": "./react.cjs",
-      "default": "./react.mjs"
-    }
-  }
+    "name":  "dynamic-analytics-core",
+    "version":  "1.3.0",
+    "description":  "Framework-agnostic dynamic analytics engine (DOM event delegation, sequences, and remote configuration loading). Works in plain JS, AngularJS 1.x, React, Angular, or any other JS environment.",
+    "peerDependencies":  {
+                             "@types/lodash":  "^4.17.16",
+                             "lodash":  "^4.17.21",
+                             "react":  "\u003e=16.8.0 \u003c20.0.0",
+                             "rxjs":  "^7.8.2"
+                         },
+    "peerDependenciesMeta":  {
+                                 "@types/lodash":  {
+                                                       "optional":  true
+                                                   },
+                                 "react":  {
+                                               "optional":  true
+                                           }
+                             },
+    "dependencies":  {
+                         "tslib":  "^2.8.1"
+                     },
+    "sideEffects":  false,
+    "main":  "./index.cjs",
+    "module":  "./index.mjs",
+    "unpkg":  "./index.global.js",
+    "types":  "./index.d.ts",
+    "exports":  {
+                    "./package.json":  {
+                                           "default":  "./package.json"
+                                       },
+                    ".":  {
+                              "types":  "./index.d.ts",
+                              "import":  "./index.mjs",
+                              "require":  "./index.cjs",
+                              "default":  "./index.mjs"
+                          },
+                    "./angularjs":  {
+                                        "types":  "./angularjs.d.ts",
+                                        "import":  "./angularjs.mjs",
+                                        "require":  "./angularjs.cjs",
+                                        "default":  "./angularjs.mjs"
+                                    },
+                    "./react":  {
+                                    "types":  "./react.d.ts",
+                                    "import":  "./react.mjs",
+                                    "require":  "./react.cjs",
+                                    "default":  "./react.mjs"
+                                }
+                }
 }
