@@ -3,6 +3,14 @@ Dynamic Analytics Service
 
 This service allows developers to define and load event configurations that can dynamically track user actions and control complex event sequences, providing flexible analytics tracking. Configurations are loaded at runtime, enabling custom event handling across different application versions.
 
+> **Not using Angular?** This package is now a thin Angular wrapper (`DynamicAnalyticsService extends
+> DynamicAnalyticsCore`) around the framework-agnostic
+> [`dynamic-analytics-core`](https://github.com/AquaticInformatics/NodePackages/tree/dynamic-analytics-core)
+> package, which ships ESM, CommonJS, and a plain `<script>`-tag bundle, plus dedicated **AngularJS 1.x**
+> and **React** integrations. If you're not building an Angular app, install `dynamic-analytics-core`
+> instead — the configuration structure documented below (`IEventConfigDefinition`, event types,
+> sequences, selectors, etc.) is identical either way.
+
 ### Simple setup instructions
 1. **Install the package**: 
    ```bash
@@ -92,8 +100,8 @@ The private `validateEventConfigDefinition` function enforces several key rules:
 1. Define configurations per application version, setting an optional `minVersion` and `maxVersion`.
 2. Assign unique IDs to events, and structure sequences with appropriate `steps` and `cancelledBy`.
 3. Use `Simple Events` for direct tracking, and `Sequences` with `Step Events` for step-based workflows.
-4. Load configurations into the service using `initializeWithConfig()`, and set `loggingEnabled` to `true` for debugging purposes.
+4. Upload the finished config as a JSON file, then load it into the service with `initialize(url, versionFilterPredicate)` — this is the primary, intended way to initialize the service, since it lets the configuration be updated independently of your application's deployment. Set `loggingEnabled` to `true` for debugging purposes.
 5. Initialization will automatically verify validity using `validateEventConfigDefinition` to prevent common setup errors.
 6. Strict typing will help you to define your configuration.
-7. Once you're satisfied and certain that the configuration will achieve what you need, upload the config as a json file and switch over to the `initialize()` function to load the final config from a URL.
+7. While authoring/validating a configuration before it's deployed, `initializeWithConfig(eventConfigDefinition, versionFilterPredicate)` can be used instead to load it directly from an in-memory object without hosting it at a URL yet. It's intended for unit tests and this kind of pre-deployment preview only — switch to `initialize()` once the config is ready.
 8. Remember to set `logginEnabled` to `false` when you're done.
