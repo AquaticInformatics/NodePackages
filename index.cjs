@@ -1,9 +1,7 @@
 "use strict";
-var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -17,14 +15,6 @@ var __copyProps = (to, from2, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // projects/dynamic-analytics-core/src/public-api.ts
@@ -38,8 +28,56 @@ __export(public_api_exports, {
 });
 module.exports = __toCommonJS(public_api_exports);
 
+// projects/dynamic-analytics-core/src/lib/utils.ts
+function isNil(value) {
+  return value === null || value === void 0;
+}
+function isString(value) {
+  return typeof value === "string";
+}
+function isPlainObject(value) {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || prototype === Object.prototype;
+}
+function isEmpty(value) {
+  if (isNil(value)) {
+    return true;
+  }
+  if (isString(value) || Array.isArray(value)) {
+    return value.length === 0;
+  }
+  if (value instanceof Map || value instanceof Set) {
+    return value.size === 0;
+  }
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+  return true;
+}
+function each(collection, iteratee) {
+  if (isNil(collection)) {
+    return;
+  }
+  const items = Array.isArray(collection) ? collection : Object.values(collection);
+  items.forEach((item) => iteratee(item));
+}
+function filter(collection, predicate) {
+  return collection?.filter((item) => predicate(item)) ?? [];
+}
+function find(collection, predicate) {
+  return collection?.find((item) => predicate(item));
+}
+function some(collection, predicate) {
+  return isNil(collection) ? false : Array.prototype.some.call(collection, (item) => predicate(item));
+}
+function includes(collection, value) {
+  return collection?.includes(value) ?? false;
+}
+
 // projects/dynamic-analytics-core/src/lib/dynamic-analytics-core.ts
-var _ = __toESM(require("lodash"));
 var import_rxjs = require("rxjs");
 var import_operators = require("rxjs/operators");
 var DynamicType = /* @__PURE__ */ ((DynamicType2) => {
@@ -105,6 +143,9 @@ var DynamicAnalyticsCore = class {
   // Reverse lookup maps: event ID → sequences that reference it as a step or cancel event
   sequencesByStepEventId = /* @__PURE__ */ new Map();
   sequencesByCancelEventId = /* @__PURE__ */ new Map();
+  devTools = {
+    injectConfig: (eventConfigDefinition) => this.injectConfig(eventConfigDefinition)
+  };
   configLoader;
   runOutsideZone;
   runInZone;
@@ -128,6 +169,7 @@ var DynamicAnalyticsCore = class {
   initialize(url, versionFilterPredicate, translateTextContent) {
     this.versionFilterPredicate = versionFilterPredicate;
     this.translateTextContentFn = translateTextContent;
+    this.registerDevTools();
     this.initializeAnalyticsConfiguration(url);
   }
   /**
@@ -143,6 +185,7 @@ var DynamicAnalyticsCore = class {
   initializeWithConfig(eventConfigDefinition, versionFilterPredicate, translateTextContent) {
     this.versionFilterPredicate = versionFilterPredicate;
     this.translateTextContentFn = translateTextContent;
+    this.registerDevTools();
     this.initializeEventConfigDefinition(eventConfigDefinition);
   }
   /**
@@ -150,12 +193,76 @@ var DynamicAnalyticsCore = class {
    * Call before re-initializing or when the host component is destroyed.
    */
   destroy() {
+    this.unregisterDevTools();
+    this.resetState();
+  }
+  /**
+   * Replace the currently loaded configuration with the given one. The new configuration goes
+   * through the same version filtering and validation as a normal load. If validation fails the
+   * error is thrown and the existing configuration and listeners are left untouched.
+   *
+   * Also exposed on `window.dynamicAnalytics.injectConfig()` so developers can call it from the
+   * browser dev tools.
+   * @param eventConfigDefinition The configuration object containing event definitions.
+   * @returns true if the configuration was replaced, false if it contained no usable events (in which case the existing configuration is kept).
+   */
+  replaceConfig(eventConfigDefinition) {
+    this.versionFilterPredicate ??= () => true;
+    const validatedEvents = this.buildValidatedEvents(eventConfigDefinition);
+    if (isNil(validatedEvents)) {
+      return false;
+    }
+    const translateTextContent = this.translateTextContentFn;
+    this.resetState();
+    this.translateTextContentFn = translateTextContent;
+    this.applyValidatedEvents(validatedEvents);
+    this.registerDevTools();
+    return true;
+  }
+  registerDevTools() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.dynamicAnalytics = this.devTools;
+  }
+  unregisterDevTools() {
+    if (typeof window !== "undefined" && window.dynamicAnalytics === this.devTools) {
+      window.dynamicAnalytics = void 0;
+    }
+  }
+  injectConfig(eventConfigDefinitionOrJson) {
+    try {
+      const eventConfigDefinition = this.parseInjectedConfig(eventConfigDefinitionOrJson);
+      if (this.replaceConfig(eventConfigDefinition)) {
+        console.info("Dynamic analytics configuration replaced.");
+      }
+    } catch (error) {
+      this.trackError("Unable to inject dynamic analytics configuration", error);
+      throw error;
+    }
+  }
+  /** Parses a JSON string (which may be malformed) or passes an already-parsed object through, ensuring the result is an object. */
+  parseInjectedConfig(eventConfigDefinitionOrJson) {
+    let parsedConfig = eventConfigDefinitionOrJson;
+    if (isString(eventConfigDefinitionOrJson)) {
+      try {
+        parsedConfig = JSON.parse(eventConfigDefinitionOrJson);
+      } catch (error) {
+        throw new Error(`Injected configuration is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (!isPlainObject(parsedConfig)) {
+      throw new Error("Injected configuration must be a JSON object or a JSON string describing one.");
+    }
+    return parsedConfig;
+  }
+  resetState() {
     this.runOutsideZone(() => {
       for (const [eventName, handler] of this.delegatedHandlers.entries()) {
         document.removeEventListener(eventName, handler, true);
       }
       this.delegatedHandlers.clear();
-      if (!_.isNil(this.beforeUnloadHandler)) {
+      if (!isNil(this.beforeUnloadHandler)) {
         window.removeEventListener("beforeunload", this.beforeUnloadHandler);
         this.beforeUnloadHandler = void 0;
       }
@@ -176,21 +283,33 @@ var DynamicAnalyticsCore = class {
     this.getConfiguration$(url).subscribe((eventConfigDefinition) => this.initializeEventConfigDefinition(eventConfigDefinition));
   }
   initializeEventConfigDefinition(eventConfigDefinition) {
-    if (_.isEmpty(eventConfigDefinition?.configs)) {
-      console.warn("No analytics configuration found");
+    const validatedEvents = this.buildValidatedEvents(eventConfigDefinition);
+    if (isNil(validatedEvents)) {
       return;
     }
-    const filteredEventConfigs = _.filter(
+    this.applyValidatedEvents(validatedEvents);
+  }
+  /** Version-filters, validates and translates the configuration without touching any state. Returns undefined if there is nothing usable. */
+  buildValidatedEvents(eventConfigDefinition) {
+    if (isEmpty(eventConfigDefinition?.configs)) {
+      console.warn("No analytics configuration found");
+      return void 0;
+    }
+    const filteredEventConfigs = filter(
       eventConfigDefinition.configs,
       (config) => this.versionFilterPredicate(config.minVersion, config.maxVersion)
     );
     this.validateEventConfigDefinition(filteredEventConfigs);
-    this.filteredEvents = this.applyTextContentTranslations(filteredEventConfigs.flatMap((config) => config.events));
-    if (_.isEmpty(this.filteredEvents)) {
+    const validatedEvents = this.applyTextContentTranslations(filteredEventConfigs.flatMap((config) => config.events));
+    if (isEmpty(validatedEvents)) {
       console.warn("No analytics events found for this application version");
-      return;
+      return void 0;
     }
-    this.sequences = _.filter(this.filteredEvents, (dynamicEvent) => this.isSequence(dynamicEvent));
+    return validatedEvents;
+  }
+  applyValidatedEvents(validatedEvents) {
+    this.filteredEvents = validatedEvents;
+    this.sequences = filter(this.filteredEvents, (dynamicEvent) => this.isSequence(dynamicEvent));
     this.buildReverseLookupMaps();
     this.precomputeListenerConfiguration();
     this.installDelegatedListeners();
@@ -198,14 +317,14 @@ var DynamicAnalyticsCore = class {
     this.isInitialized = true;
   }
   applyTextContentTranslations(events) {
-    if (_.isNil(this.translateTextContentFn)) {
+    if (isNil(this.translateTextContentFn)) {
       return events;
     }
     return events.map((event) => {
       if (this.isDynamicEventWithSelector(event)) {
         const selectorEvent = event;
-        const hasTextContents = !_.isNil(selectorEvent.textContents) && !_.isEmpty(selectorEvent.textContents);
-        const hasStatusTextContents = !_.isNil(selectorEvent.guardSelectorTextContents) && !_.isEmpty(selectorEvent.guardSelectorTextContents);
+        const hasTextContents = !isNil(selectorEvent.textContents) && !isEmpty(selectorEvent.textContents);
+        const hasStatusTextContents = !isNil(selectorEvent.guardSelectorTextContents) && !isEmpty(selectorEvent.guardSelectorTextContents);
         if (hasTextContents || hasStatusTextContents) {
           const translated = { ...event };
           if (hasTextContents) {
@@ -224,10 +343,10 @@ var DynamicAnalyticsCore = class {
     this.delegatedConfigsByEventAction.clear();
     this.documentConfigsByEventAction.clear();
     this.configsNeedingStatusSelectorCheck.clear();
-    _.each(this.filteredEvents, (dynamicEvent) => {
+    each(this.filteredEvents, (dynamicEvent) => {
       if (this.isDynamicEventWithSelector(dynamicEvent)) {
         const selectorEvent = dynamicEvent;
-        if (!_.isNil(selectorEvent.guardSelector) && !_.isEmpty(selectorEvent.guardSelector)) {
+        if (!isNil(selectorEvent.guardSelector) && !isEmpty(selectorEvent.guardSelector)) {
           this.configsNeedingStatusSelectorCheck.set(selectorEvent.id, selectorEvent.guardSelector);
         }
         if (selectorEvent.selector === "document") {
@@ -246,13 +365,13 @@ var DynamicAnalyticsCore = class {
   buildReverseLookupMaps() {
     this.sequencesByStepEventId.clear();
     this.sequencesByCancelEventId.clear();
-    _.each(this.sequences, (sequence) => {
-      _.each(sequence.steps, (stepId) => {
+    each(this.sequences, (sequence) => {
+      each(sequence.steps, (stepId) => {
         const existing = this.sequencesByStepEventId.get(stepId) ?? [];
         existing.push(sequence);
         this.sequencesByStepEventId.set(stepId, existing);
       });
-      _.each(sequence.cancelledBy, (cancelId) => {
+      each(sequence.cancelledBy, (cancelId) => {
         const existing = this.sequencesByCancelEventId.get(cancelId) ?? [];
         existing.push(sequence);
         this.sequencesByCancelEventId.set(cancelId, existing);
@@ -281,7 +400,7 @@ var DynamicAnalyticsCore = class {
     });
   }
   installBeforeUnloadListener() {
-    if (_.isEmpty(this.beforeUnloadConfigs)) {
+    if (isEmpty(this.beforeUnloadConfigs)) {
       return;
     }
     this.beforeUnloadHandler = () => {
@@ -300,16 +419,16 @@ var DynamicAnalyticsCore = class {
       this.getOnDynamicEventHandler(documentConfig)(event);
     }
     const delegatedConfigsForAction = this.delegatedConfigsByEventAction.get(eventAction) ?? [];
-    if (_.isEmpty(delegatedConfigsForAction)) {
+    if (isEmpty(delegatedConfigsForAction)) {
       return;
     }
     const targetElement = event.target;
-    if (_.isNil(targetElement)) {
+    if (isNil(targetElement)) {
       return;
     }
     for (const delegatedConfig of delegatedConfigsForAction) {
       const matchingElement = this.closestMatching(targetElement, delegatedConfig.selector);
-      if (_.isNil(matchingElement)) {
+      if (isNil(matchingElement)) {
         continue;
       }
       if (!this.isValidForTextContents(delegatedConfig, matchingElement)) {
@@ -324,14 +443,14 @@ var DynamicAnalyticsCore = class {
   }
   isValidForStatusSelector(dynamicEvent) {
     const guardSelector = this.configsNeedingStatusSelectorCheck.get(dynamicEvent.id);
-    if (_.isNil(guardSelector)) {
+    if (isNil(guardSelector)) {
       return true;
     }
     const matchingStatusElements = document.querySelectorAll(guardSelector);
-    if (_.isNil(matchingStatusElements) || matchingStatusElements.length === 0) {
+    if (isNil(matchingStatusElements) || matchingStatusElements.length === 0) {
       return false;
     }
-    if (!_.isNil(dynamicEvent.guardSelectorTextContents) && !_.isEmpty(dynamicEvent.guardSelectorTextContents)) {
+    if (!isNil(dynamicEvent.guardSelectorTextContents) && !isEmpty(dynamicEvent.guardSelectorTextContents)) {
       const hasTextMatch = Array.from(matchingStatusElements).some(
         (element) => this.elementMatchesText(element, dynamicEvent.guardSelectorTextContents, !!dynamicEvent.matchExactGuardSelectorTextContents)
       );
@@ -346,7 +465,7 @@ var DynamicAnalyticsCore = class {
     return exactMatch ? trimmed === text : trimmed.includes(text);
   }
   isValidForTextContents(dynamicEvent, element) {
-    if (_.isNil(dynamicEvent.textContents) || _.isEmpty(dynamicEvent.textContents)) {
+    if (isNil(dynamicEvent.textContents) || isEmpty(dynamicEvent.textContents)) {
       return true;
     }
     return this.elementMatchesText(element, dynamicEvent.textContents, !!dynamicEvent.matchExactTextContents);
@@ -369,7 +488,7 @@ var DynamicAnalyticsCore = class {
   }
   getOnDynamicEventHandler(dynamicEvent, element) {
     return (event) => {
-      if (!_.isNil(element) && this.isDynamicEventWithSelector(dynamicEvent)) {
+      if (!isNil(element) && this.isDynamicEventWithSelector(dynamicEvent)) {
         const selectorToCheck = dynamicEvent.guardSelector ?? dynamicEvent.selector;
         const elementsMatchingSelector = document.querySelectorAll(selectorToCheck);
         const doesElementMatchConfig = this.doesElementMatchConfig(dynamicEvent, element, elementsMatchingSelector);
@@ -382,8 +501,8 @@ var DynamicAnalyticsCore = class {
     };
   }
   doesElementMatchConfig(dynamicEvent, element, elementsMatchingSelector) {
-    if (_.isNil(dynamicEvent.guardSelector)) {
-      return _.some(elementsMatchingSelector, (matchingElement) => matchingElement === element);
+    if (isNil(dynamicEvent.guardSelector)) {
+      return some(elementsMatchingSelector, (matchingElement) => matchingElement === element);
     }
     return elementsMatchingSelector.length > 0;
   }
@@ -401,7 +520,7 @@ var DynamicAnalyticsCore = class {
     }
   }
   shouldTrackKeyboardEvent(dynamicEvent, event) {
-    if (_.isNil(event)) {
+    if (isNil(event)) {
       return true;
     }
     if (!this.isKeyboardEventType(dynamicEvent)) {
@@ -409,7 +528,7 @@ var DynamicAnalyticsCore = class {
     }
     const keyboardDynamicEvent = dynamicEvent;
     const pressedKey = event?.key;
-    if (!_.isNil(keyboardDynamicEvent.keys) && !_.isEmpty(keyboardDynamicEvent.keys)) {
+    if (!isNil(keyboardDynamicEvent.keys) && !isEmpty(keyboardDynamicEvent.keys)) {
       const allowedKeys = keyboardDynamicEvent.keys.split("|");
       if (!allowedKeys.includes(pressedKey)) {
         return false;
@@ -421,7 +540,7 @@ var DynamicAnalyticsCore = class {
     return this.isAlphaNumericKeyboardEvent(event);
   }
   onBeforeUnload() {
-    if (_.isEmpty(this.beforeUnloadConfigs)) {
+    if (isEmpty(this.beforeUnloadConfigs)) {
       return;
     }
     for (const beforeUnloadConfig of this.beforeUnloadConfigs) {
@@ -439,10 +558,10 @@ var DynamicAnalyticsCore = class {
   }
   getAdditionalEventData(dynamicEvent) {
     let additionalData;
-    if (!_.isEmpty(dynamicEvent.additionalDataSelectors)) {
+    if (!isEmpty(dynamicEvent.additionalDataSelectors)) {
       additionalData = dynamicEvent.additionalDataSelectors.map((selector) => {
         const elementWithData = document.querySelector(selector);
-        if (!_.isNil(elementWithData)) {
+        if (!isNil(elementWithData)) {
           if (elementWithData instanceof HTMLInputElement) {
             return elementWithData.value;
           }
@@ -475,7 +594,7 @@ var DynamicAnalyticsCore = class {
     const isSimpleEvent = this.isSimpleEvent(event);
     if (isSimpleEvent || this.isStepEvent(event)) {
       let logDetails = `${event.id}. ${event.message}`;
-      if (!_.isNil(event.selector)) {
+      if (!isNil(event.selector)) {
         logDetails += `. ${event.selector}`;
       }
       if (isSimpleEvent) {
@@ -489,8 +608,8 @@ var DynamicAnalyticsCore = class {
   getSequenceProgress(dynamicEvent) {
     const sequencesContainingThisEvent = this.sequencesByStepEventId.get(dynamicEvent.id) ?? [];
     const progress = [];
-    _.each(sequencesContainingThisEvent, (sequence) => {
-      if (_.includes(this.sequenceTracker[sequence.id], dynamicEvent.id)) {
+    each(sequencesContainingThisEvent, (sequence) => {
+      if (includes(this.sequenceTracker[sequence.id], dynamicEvent.id)) {
         progress.push(`Sequence ${sequence.id} = ${this.sequenceTracker[sequence.id].length}/${sequence.steps.length}`);
       }
     });
@@ -498,11 +617,11 @@ var DynamicAnalyticsCore = class {
   }
   onStepEvent(dynamicEvent, event) {
     const sequencesCancelledByThisEvent = this.sequencesByCancelEventId.get(dynamicEvent.id) ?? [];
-    if (!_.isEmpty(sequencesCancelledByThisEvent)) {
+    if (!isEmpty(sequencesCancelledByThisEvent)) {
       const resetSequences = [];
-      _.each(sequencesCancelledByThisEvent, (sequence) => {
+      each(sequencesCancelledByThisEvent, (sequence) => {
         const tracker = this.sequenceTracker[sequence.id] = this.sequenceTracker[sequence.id] ?? [];
-        if (!_.isEmpty(tracker) && _.includes(sequence.cancelledBy, dynamicEvent.id) && !this.doesEventTargetTriggerStepEvent(sequence, event)) {
+        if (!isEmpty(tracker) && includes(sequence.cancelledBy, dynamicEvent.id) && !this.doesEventTargetTriggerStepEvent(sequence, event)) {
           resetSequences.push(sequence);
           this.resetSequence(sequence);
           this.blockedSequenceIds.add(sequence.id);
@@ -511,12 +630,12 @@ var DynamicAnalyticsCore = class {
           }, 10);
         }
       });
-      if (!_.isEmpty(resetSequences)) {
+      if (!isEmpty(resetSequences)) {
         this.log(`Sequence reset by event ${dynamicEvent.id}: ${resetSequences.map((sequence) => sequence.id).join(",")}`);
       }
     }
     const sequencesContainingThisEvent = (this.sequencesByStepEventId.get(dynamicEvent.id) ?? []).filter((sequence) => !this.blockedSequenceIds.has(sequence.id));
-    _.each(sequencesContainingThisEvent, (sequence) => {
+    each(sequencesContainingThisEvent, (sequence) => {
       setTimeout(() => {
         this.blockedSequenceIds.delete(sequence.id);
       }, 10);
@@ -532,8 +651,8 @@ var DynamicAnalyticsCore = class {
         this.onStepEvent(sequence);
       } else {
         const nextEventIdInSequence = sequence.steps[tracker.length];
-        const nextEventInSequence = _.find(this.filteredEvents, { id: nextEventIdInSequence });
-        if (_.isNil(nextEventInSequence)) {
+        const nextEventInSequence = find(this.filteredEvents, (dynamicEvent2) => dynamicEvent2.id === nextEventIdInSequence);
+        if (isNil(nextEventInSequence)) {
           this.trackError(`Next event in sequence not found. Incorrect Id specified? Next event id ${nextEventIdInSequence}. Sequence ${sequence.id}`);
           this.resetSequence(sequence);
           return;
@@ -541,7 +660,7 @@ var DynamicAnalyticsCore = class {
         if (this.isTimedEvent(nextEventInSequence)) {
           this.startTimedEventTimerForSequence(nextEventInSequence, sequence);
         }
-        if (tracker.length === 1 && !_.isNil(sequence.timeout)) {
+        if (tracker.length === 1 && !isNil(sequence.timeout)) {
           this.startSequenceTimeout(sequence);
         }
       }
@@ -553,7 +672,7 @@ var DynamicAnalyticsCore = class {
       throw new Error(`Timeout value must be greater than 0 for event ${dynamicEvent.id}`);
     }
     const tracker = this.timedEventForSequenceTracker[sequence.id] = this.timedEventForSequenceTracker[sequence.id] ?? {};
-    if (!_.isNil(tracker[dynamicEvent.id])) {
+    if (!isNil(tracker[dynamicEvent.id])) {
       throw new Error(`Timer event already exists for event ${dynamicEvent.id} in sequence ${sequence.id}`);
     }
     this.log(`Timer starting for event ${dynamicEvent.id} in sequence ${sequence.id}`);
@@ -565,15 +684,15 @@ var DynamicAnalyticsCore = class {
   }
   resetTimersForSequence(sequence) {
     const tracker = this.timedEventForSequenceTracker[sequence.id];
-    if (!_.isNil(tracker)) {
-      _.each(tracker, (timeoutId) => clearTimeout(timeoutId));
+    if (!isNil(tracker)) {
+      each(tracker, (timeoutId) => clearTimeout(timeoutId));
     }
     delete this.timedEventForSequenceTracker[sequence.id];
   }
   startSequenceTimeout(sequence) {
     const tracker = this.timedEventForSequenceTracker[sequence.id] = this.timedEventForSequenceTracker[sequence.id] ?? {};
     tracker[sequence.id] = setTimeout(() => {
-      if (!_.isEmpty(this.sequenceTracker[sequence.id])) {
+      if (!isEmpty(this.sequenceTracker[sequence.id])) {
         this.log(`Sequence ${sequence.id} timed out`);
         this.resetSequence(sequence);
       }
@@ -623,28 +742,28 @@ var DynamicAnalyticsCore = class {
     return (this.isSimpleEvent(event) || this.isStepEvent(event)) && event.eventAction === "timed" /* Timed */;
   }
   doesEventTargetTriggerStepEvent(sequence, event) {
-    if (_.isNil(event)) {
+    if (isNil(event)) {
       return false;
     }
     const tracker = this.sequenceTracker[sequence.id];
-    if (_.isEmpty(tracker)) {
+    if (isEmpty(tracker)) {
       return false;
     }
     const otherStepEventId = sequence.steps[tracker.length - 1];
-    const stepEvent = _.find(this.filteredEvents, (dynamicEvent) => dynamicEvent.id === otherStepEventId);
-    if (_.isNil(stepEvent) || !this.isDynamicEventWithSelector(stepEvent)) {
+    const stepEvent = find(this.filteredEvents, (dynamicEvent) => dynamicEvent.id === otherStepEventId);
+    if (isNil(stepEvent) || !this.isDynamicEventWithSelector(stepEvent)) {
       return false;
     }
     const elementsMatchingSelector = document.querySelectorAll(stepEvent.guardSelector ?? stepEvent.selector);
     const target = event.target;
-    return _.some(elementsMatchingSelector, (element) => element === target || element.contains(target));
+    return some(elementsMatchingSelector, (element) => element === target || element.contains(target));
   }
   validateEventConfigDefinition(filteredEventConfigs) {
     const uniqueEventIds = /* @__PURE__ */ new Set();
     const uniqueSequenceStepEventIds = /* @__PURE__ */ new Set();
     const uniqueCancelEventIds = /* @__PURE__ */ new Set();
-    _.each(filteredEventConfigs, (config) => {
-      _.each(config.events, (event) => {
+    each(filteredEventConfigs, (config) => {
+      each(config.events, (event) => {
         if (uniqueEventIds.has(event.id)) {
           throw new Error("Event ids must be unique");
         }
@@ -666,32 +785,32 @@ var DynamicAnalyticsCore = class {
             uniqueCancelEventIds.add(id);
           });
         }
-        if (this.isTimedEvent(event) && (event.timeout <= 0 || _.isNaN(event.timeout))) {
+        if (this.isTimedEvent(event) && (event.timeout <= 0 || Number.isNaN(event.timeout))) {
           throw new Error("Timeout event must be a number greater than zero");
         }
-        if (!_.isNil(event.additionalData)) {
+        if (!isNil(event.additionalData)) {
           throw new Error("Additional data must not be provided in the configuration. Use `additionalDataSelectors` to allow the service to find additional data in the DOM at event-time");
         }
-        if (!_.isNil(event.additionalDataSelectors) && _.some(event.additionalDataSelectors, (selector) => _.isEmpty(selector))) {
+        if (!isNil(event.additionalDataSelectors) && some(event.additionalDataSelectors, (selector) => isEmpty(selector))) {
           throw new Error("Additional data selectors cannot be an empty string");
         }
-        if (this.isDynamicEventWithSelector(event) && !_.isNil(event.selector) && _.isEmpty(event.selector)) {
+        if (this.isDynamicEventWithSelector(event) && !isNil(event.selector) && isEmpty(event.selector)) {
           throw new Error("Selector cannot be an empty string");
         }
-        if (this.isDynamicEventWithSelector(event) && event.matchExactTextContents === true && (_.isNil(event.textContents) || _.isEmpty(event.textContents))) {
+        if (this.isDynamicEventWithSelector(event) && event.matchExactTextContents === true && (isNil(event.textContents) || isEmpty(event.textContents))) {
           throw new Error("matchExactTextContents can only be true when textContents is a non-empty string");
         }
-        if (this.isDynamicEventWithSelector(event) && !_.isNil(event.guardSelectorTextContents) && !_.isEmpty(event.guardSelectorTextContents) && (_.isNil(event.guardSelector) || _.isEmpty(event.guardSelector))) {
+        if (this.isDynamicEventWithSelector(event) && !isNil(event.guardSelectorTextContents) && !isEmpty(event.guardSelectorTextContents) && (isNil(event.guardSelector) || isEmpty(event.guardSelector))) {
           throw new Error("guardSelectorTextContents requires a non-empty guardSelector");
         }
-        if (this.isDynamicEventWithSelector(event) && event.matchExactGuardSelectorTextContents === true && (_.isNil(event.guardSelectorTextContents) || _.isEmpty(event.guardSelectorTextContents))) {
+        if (this.isDynamicEventWithSelector(event) && event.matchExactGuardSelectorTextContents === true && (isNil(event.guardSelectorTextContents) || isEmpty(event.guardSelectorTextContents))) {
           throw new Error("matchExactGuardSelectorTextContents can only be true when guardSelectorTextContents is a non-empty string");
         }
-        if (!_.isNil(event.keys)) {
+        if (!isNil(event.keys)) {
           if (!this.isKeyboardEventType(event)) {
             throw new Error("keys can only be specified for keyboard event types");
           }
-          if (_.isEmpty(event.keys)) {
+          if (isEmpty(event.keys)) {
             throw new Error("keys cannot be an empty string");
           }
         }
@@ -714,8 +833,8 @@ var DynamicAnalyticsCore = class {
     }
     for (const sequenceTimerKey of Object.keys(this.timedEventForSequenceTracker)) {
       const tracker = this.timedEventForSequenceTracker[Number(sequenceTimerKey)];
-      if (!_.isNil(tracker)) {
-        _.each(tracker, (timeoutId) => clearTimeout(timeoutId));
+      if (!isNil(tracker)) {
+        each(tracker, (timeoutId) => clearTimeout(timeoutId));
       }
       delete this.timedEventForSequenceTracker[Number(sequenceTimerKey)];
     }

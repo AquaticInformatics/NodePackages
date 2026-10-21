@@ -112,6 +112,23 @@ interface DynamicAnalyticsCoreOptions {
      */
     runInZone?: (fn: () => void) => void;
 }
+/**
+ * Dev-tools API exposed as `window.dynamicAnalytics` once a {@link DynamicAnalyticsCore} instance is initialized.
+ */
+interface DynamicAnalyticsDevTools {
+    /**
+     * Replaces the currently loaded configuration with the given one, supplied either as an object or
+     * as a JSON string. It is version filtered and validated as normal; if it is malformed JSON or fails
+     * validation an error is thrown and the existing configuration is kept.
+     * Example: `dynamicAnalytics.injectConfig({ configs: [{ events: [...] }] })`
+     */
+    injectConfig: (eventConfigDefinitionOrJson: IEventConfigDefinition | string) => void;
+}
+declare global {
+    interface Window {
+        dynamicAnalytics?: DynamicAnalyticsDevTools;
+    }
+}
 
 /** Name of the AngularJS module registered by {@link registerDynamicAnalyticsAngularJsModule}. */
 declare const DYNAMIC_ANALYTICS_ANGULARJS_MODULE_NAME = "dynamicAnalytics";

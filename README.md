@@ -91,6 +91,25 @@ automatically on unmount.
   **unit tests** and for **previewing/validating a configuration before deployment** (e.g. in the
   configurator app) — it is not intended for production use.
 
+### Injecting a config from the browser dev tools
+
+Once a service instance has been initialized, it exposes `window.dynamicAnalytics.injectConfig()`.
+Run it from the dev tools console to try a config in the running app without redeploying:
+
+```js
+dynamicAnalytics.injectConfig({ configs: [{ events: [ /* ... */ ] }] });
+```
+
+The argument can be a parsed object or a JSON string (handy for pasting a config straight from a
+file). Malformed JSON, or JSON that isn't an object, is rejected with an error.
+
+The injected config **replaces** whatever config is loaded in memory. It goes through the same
+version filtering, text-content translation and validation as a normal load. If it fails validation
+the error is thrown and reported (`console.error`, plus an error event on `onEvent` when
+`errorTrackingEnabled` is true), and the existing config is left untouched. The injection only
+lasts until the page is reloaded. The same behaviour is available programmatically via
+`replaceConfig(eventConfigDefinition)`.
+
 ### Configuration structure, event types, and validation rules
 
 See the main [`dynamic-analytics`](https://github.com/AquaticInformatics/NodePackages/tree/dynamic-analytics)

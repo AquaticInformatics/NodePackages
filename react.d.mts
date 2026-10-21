@@ -113,8 +113,25 @@ interface DynamicAnalyticsCoreOptions {
     runInZone?: (fn: () => void) => void;
 }
 /**
+ * Dev-tools API exposed as `window.dynamicAnalytics` once a {@link DynamicAnalyticsCore} instance is initialized.
+ */
+interface DynamicAnalyticsDevTools {
+    /**
+     * Replaces the currently loaded configuration with the given one, supplied either as an object or
+     * as a JSON string. It is version filtered and validated as normal; if it is malformed JSON or fails
+     * validation an error is thrown and the existing configuration is kept.
+     * Example: `dynamicAnalytics.injectConfig({ configs: [{ events: [...] }] })`
+     */
+    injectConfig: (eventConfigDefinitionOrJson: IEventConfigDefinition | string) => void;
+}
+declare global {
+    interface Window {
+        dynamicAnalytics?: DynamicAnalyticsDevTools;
+    }
+}
+/**
  * Framework-agnostic dynamic analytics engine. Works in any JS environment (plain JS, AngularJS
- * 1.x, React, etc.) with no required dependencies beyond `rxjs` and `lodash`.
+ * 1.x, React, etc.) with no required dependencies beyond `rxjs`.
  */
 declare class DynamicAnalyticsCore {
     /** Emits tracked events (Simple events and completed trackable Sequences) as well as failures (when `errorTrackingEnabled` is true). Subscribe to forward events to your analytics backend. */
@@ -139,6 +156,7 @@ declare class DynamicAnalyticsCore {
     private configsNeedingStatusSelectorCheck;
     private sequencesByStepEventId;
     private sequencesByCancelEventId;
+    private readonly devTools;
     private readonly configLoader;
     private readonly runOutsideZone;
     private readonly runInZone;
@@ -172,8 +190,28 @@ declare class DynamicAnalyticsCore {
      * Call before re-initializing or when the host component is destroyed.
      */
     destroy(): void;
+    /**
+     * Replace the currently loaded configuration with the given one. The new configuration goes
+     * through the same version filtering and validation as a normal load. If validation fails the
+     * error is thrown and the existing configuration and listeners are left untouched.
+     *
+     * Also exposed on `window.dynamicAnalytics.injectConfig()` so developers can call it from the
+     * browser dev tools.
+     * @param eventConfigDefinition The configuration object containing event definitions.
+     * @returns true if the configuration was replaced, false if it contained no usable events (in which case the existing configuration is kept).
+     */
+    replaceConfig(eventConfigDefinition: IEventConfigDefinition): boolean;
+    private registerDevTools;
+    private unregisterDevTools;
+    private injectConfig;
+    /** Parses a JSON string (which may be malformed) or passes an already-parsed object through, ensuring the result is an object. */
+    private parseInjectedConfig;
+    private resetState;
     private initializeAnalyticsConfiguration;
     private initializeEventConfigDefinition;
+    /** Version-filters, validates and translates the configuration without touching any state. Returns undefined if there is nothing usable. */
+    private buildValidatedEvents;
+    private applyValidatedEvents;
     private applyTextContentTranslations;
     private precomputeListenerConfiguration;
     private buildReverseLookupMaps;
