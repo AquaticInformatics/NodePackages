@@ -104,4 +104,5 @@ The private `validateEventConfigDefinition` function enforces several key rules:
 5. Initialization will automatically verify validity using `validateEventConfigDefinition` to prevent common setup errors.
 6. Strict typing will help you to define your configuration.
 7. While authoring/validating a configuration before it's deployed, `initializeWithConfig(eventConfigDefinition, versionFilterPredicate)` can be used instead to load it directly from an in-memory object without hosting it at a URL yet. It's intended for unit tests and this kind of pre-deployment preview only — switch to `initialize()` once the config is ready.
-8. Remember to set `logginEnabled` to `false` when you're done.
+8. To try a config in a running app, call `dynamicAnalytics.injectConfig(eventConfigDefinition)` (an object or a JSON string) from the browser dev tools console. It replaces the config loaded in memory (until the page is reloaded) and is validated as normal; if it's invalid, the error is reported and the existing config is kept.
+9. Remember to set `loggingEnabled` to `false` when you're done.
