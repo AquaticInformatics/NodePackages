@@ -485,13 +485,13 @@ var DynamicAnalyticsCore = class {
     return elementsMatchingSelector.length > 0;
   }
   onSimpleOrStepEvent(dynamicEvent, event) {
+    if (!this.shouldTrackKeyboardEvent(dynamicEvent, event)) {
+      return;
+    }
     const isSimpleEvent = this.isSimpleEvent(dynamicEvent);
     if (isSimpleEvent) {
-      const shouldTrackKeyboardEvent = this.shouldTrackKeyboardEvent(dynamicEvent, event);
-      if (shouldTrackKeyboardEvent) {
-        const additionalData = this.getAdditionalEventData(dynamicEvent);
-        this.trackEvent(dynamicEvent, additionalData);
-      }
+      const additionalData = this.getAdditionalEventData(dynamicEvent);
+      this.trackEvent(dynamicEvent, additionalData);
     }
     if (isSimpleEvent || this.isStepEvent(dynamicEvent)) {
       this.onStepEvent(dynamicEvent, event);
