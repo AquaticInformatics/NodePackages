@@ -2,6 +2,7 @@ import { Observable } from 'rxjs';
 
 type VersionParameter = string | number | undefined;
 interface IEventConfig {
+    label?: string;
     minVersion?: VersionParameter;
     maxVersion?: VersionParameter;
     events: DynamicEvent[];
